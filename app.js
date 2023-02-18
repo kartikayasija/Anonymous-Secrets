@@ -31,7 +31,8 @@ mongoose.connect("mongodb://127.0.0.1:27017/secret");
 const userSchema = new mongoose.Schema({
     email: String,
     password: String,
-    googleId: String
+    googleId: String,
+    secret: [String],
 })
 
 // userSchema.plugin(encrypt,{secret: process.env.SECRET, encryptedFields:["password"]})
@@ -48,13 +49,13 @@ passport.serializeUser(function(user, cb) {
     process.nextTick(function() {
       cb(null, { id: user.id, username: user.username, name: user.name });
     });
-  });
+});
   
-  passport.deserializeUser(function(user, cb) {
+passport.deserializeUser(function(user, cb) {
     process.nextTick(function() {
       return cb(null, user);
     });
-  });
+});
 
 passport.use(new GoogleStrategy({
     clientID: process.env.CLIENT_ID,
@@ -62,7 +63,7 @@ passport.use(new GoogleStrategy({
     callbackURL: "http://localhost:3000/auth/google/secrets"
   },
   function(accessToken, refreshToken, profile, cb) {
-    console.log(profile);
+    // console.log(profile);
     User.findOrCreate({username: profile.id,googleId: profile.id}, function (err, user) {
       return cb(err, user);
     });
@@ -84,7 +85,14 @@ app.get("/register",function(req,res){
 
 app.get("/secrets",function(req,res){
     if(req.isAuthenticated()){
-        res.render("secrets.ejs");
+        User.find({"secret":{$ne: null}},function(err,x){
+            if(err) console.log(err);
+            else{
+                if(x){
+                    res.render("secrets",{usersWithSecret: x});
+                }
+            }
+        })
     }
     else{
         res.redirect("/login");
@@ -108,6 +116,11 @@ app.get("/auth/google/secrets",
     // Successful authentication, redirect home.
     res.redirect('/secrets');
 });
+
+app.get("/submit",function(req,res){
+    if(req.isAuthenticated()) res.render("submit.ejs");
+    else res.redirect("/login");
+})
 
 app.post("/register",function(req,res){
 
@@ -139,6 +152,23 @@ app.post("/login",function(req,res){
         }
     })
 })
+
+app.post("/submit",function(req,res){
+    const submit = req.body.secret;
+
+    User.findById(req.user.id,function(err,x){
+        if(err) console.log(err);
+        else{
+            if(x){
+                x.secret.push(submit);
+                x.save();
+                res.redirect("/secrets");
+            }
+        }
+    })
+
+})
+
 app.listen(3000,function(){
     console.log("Started");
 })
